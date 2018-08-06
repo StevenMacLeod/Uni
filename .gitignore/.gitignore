@@ -1,0 +1,294 @@
+--[[
+	Author: WelpNathan
+	Date: 22/06/2018
+	
+	Script: This script will handle players receiving uniforms
+	        within the site.
+--]]
+
+---------------------------
+--   V A R I A B L E S   --
+---------------------------
+
+-- ROBLOX Services
+local players = game:GetService('Players')
+local serverStorage = game:GetService('ServerStorage')
+
+-- ServerStorage
+local headStorage = serverStorage:WaitForChild('StoragePlayerAssets'):WaitForChild('UniformAssets'):WaitForChild('HeadMeshes')
+
+local uniformAPI = {}
+
+---------------------------
+-- M A I N   S C R I P T --
+---------------------------
+
+--[[
+	--------------------------------------------------------------------------------------------------
+	-- @Name : 		  removePlayerUniform
+	-- @Description : This will remove any old uniform packages which may be
+					  welded onto the player.
+	
+	-- @Params : 	  Player 'player' - The player to have their uniform removed.
+	--------------------------------------------------------------------------------------------------
+--]]
+function uniformAPI.removePlayerUniform(player)
+	local character = player.Character
+	if character:FindFirstChild('UniformPackage') then
+		character.UniformPackage:ClearAllChildren()
+	end
+end
+
+--[[
+	--------------------------------------------------------------------------------------------------
+	-- @Name : 		  removePlayerGraphicsAndSetNew
+	-- @Description : This will remove any old graphics and set new ones.
+					  This will be the player shirt and pants.
+	
+	-- @Params : 	  Player 'player' - The player to have their graphics changed.
+					  Instance<Shirt> 'shirtTemplate' - The shirt to be added to the player.
+					  Instance<Pants> 'pantsTemplate' - The pants to be added to the player.
+	--------------------------------------------------------------------------------------------------
+--]]
+function uniformAPI.removePlayerGraphicsAndSetNew(player, shirt, pants)
+	-- remove old shirts and pants
+	--[[if shirt then
+		if player.Character:FindFirstChild('Shirt') then player.Character.Shirt:Destroy() end
+		local newShirt = Instance.new('Shirt', player.Character)
+		newShirt.Name = 'Shirt'
+		newShirt.ShirtTemplate = shirt.ShirtTemplate
+	end
+	
+	if pants then
+		if player.Character:FindFirstChild('Pants') then player.Character.Pants:Destroy() end
+		local newPants = Instance.new('Pants', player.Character)
+		newPants.Name = 'Pants'
+		newPants.PantsTemplate = pants.PantsTemplate
+	end
+	--]]
+	
+	if shirt then
+		player:LoadCharacterAppearance(shirt)
+	end
+	if pants then
+		player:LoadCharacterAppearance(pants)
+	end
+end
+
+--[[
+	--------------------------------------------------------------------------------------------------
+	-- @Name : 		  removePlayerGraphicsAndSetNew
+	-- @Description : This will handle the player accessories determined by
+					  the uniform settings.
+	
+	-- @Params : 	  Player 'player' - The player to have their accessories changed.
+					  Instance<Configuration> 'uniformSettings' - The settings for the uniform.
+	--------------------------------------------------------------------------------------------------
+--]]
+function uniformAPI.handlePlayerAccessories(player, uniformSettings)
+	local character = player.Character
+	character.Humanoid:RemoveAccessories()
+	
+	if not uniformSettings.RemovePlayerAccessories.Value then
+		-- create a model of the player and add accessories as older uniforms will
+		-- disrupt accessories. We have to get new ones!
+		local playerModel = players:GetCharacterAppearanceAsync(player.UserId)
+		for _, part in pairs(playerModel:GetChildren()) do
+			if part:IsA('Accessory') then
+				character.Humanoid:AddAccessory(part)
+			end
+		end
+	end 
+	
+	-- if the uniform requires any accessories that need to be added, they will be added here
+	for _, accessory in pairs(uniformSettings.ForceAccessories:GetChildren()) do
+		character.Humanoid:AddAccessory(accessory)
+	end
+end
+
+--[[
+	--------------------------------------------------------------------------------------------------
+	-- @Name : 		  handlePlayerHead
+	-- @Description : This will handle the player's head if the settings
+					  require it.
+	
+	-- @Params : 	  Player 'player' - The player to have their head changed.
+					  boolean 'removeHead' - Whether or not the head needs to be removed.
+	--------------------------------------------------------------------------------------------------
+--]]
+function uniformAPI.handlePlayerHead(player, removeHead)
+	local character = player.Character
+
+	for _, v in pairs(character.Head:GetChildren()) do
+		if v:IsA('SpecialMesh') then
+			v:Destroy()
+		end
+	end
+	
+	if removeHead then
+		if character.Head:FindFirstChild('face') then character.Head.face.Transparency = 1 end
+		headStorage:WaitForChild('HeadlessMesh'):Clone().Parent = character.Head
+	else
+		if character.Head:FindFirstChild('face') then character.Head.face.Transparency = 0 end
+		headStorage:WaitForChild('RegularHead'):Clone().Parent = character.Head
+	end
+end
+
+--[[
+	--------------------------------------------------------------------------------------------------
+	-- @Name : 		  handlePlayerBodyColours
+	-- @Description : This will handle the player's body colours if the uniform
+					  requires specific colours.
+	
+	-- @Params : 	  Player 'player' - The player to have their body colours changed.
+					  Instance<BodyColors> 'bodyColours' - The body colours for the uniform.
+	--------------------------------------------------------------------------------------------------
+--]]
+function uniformAPI.handlePlayerBodyColours(player, bodyColours)
+	if bodyColours == nil then return end
+	
+	local character = player.Character
+	if character:FindFirstChild('Body Colors') then character['Body Colors']:Destroy() end
+	bodyColours:Clone().Parent = character
+end
+
+--[[
+	--------------------------------------------------------------------------------------------------
+	-- @Name : 		  setPlayerUniform
+	-- @Description : When this is called, it will call all of the previous functions
+					  in order to give the player their required uniform
+	
+	-- @Params : 	  Player 'player' - The player to have a new uniform.
+					  Instance<Model> 'uniformLink' - The place to the uniform.
+	--------------------------------------------------------------------------------------------------
+--]]
+function uniformAPI.setPlayerUniform(player, uniformLink)
+	if player and player.Character and player.Character:FindFirstChild('Humanoid') and player.Character.Humanoid.Health > 0 then
+		local character = player.Character
+		
+		local uniformPackage = uniformLink.UniformPackage:Clone()
+		local uniformSettings = uniformLink.UniformSettings
+		
+		-- add the uniform package model if needed
+		if character:FindFirstChild('UniformPackage') == nil then
+			local model = Instance.new('Model', character)
+			model.Name = 'UniformPackage'
+		end
+		
+		-- handle functions for the unfirom
+		uniformAPI.removePlayerUniform(player)
+		uniformAPI.removePlayerGraphicsAndSetNew(player, uniformSettings:FindFirstChild('Shirt'), uniformSettings:FindFirstChild('Pants'))
+		uniformAPI.handlePlayerAccessories(player, uniformSettings)
+		uniformAPI.handlePlayerHead(player, uniformSettings.RemovePlayerHead.Value)
+		uniformAPI.handlePlayerBodyColours(player, uniformSettings:FindFirstChild('Body Colors'))
+		
+		-- handle adding the physical uniform to the player
+		for _, mainAsset in pairs(uniformPackage:GetChildren()) do
+			mainAsset.Parent = player.Character.UniformPackage
+			local C = mainAsset:GetChildren()
+			for i = 1, #C do
+				if C[i]:IsA('Part') or C[i]:IsA('UnionOperation') or C[i]:IsA('MeshPart') then
+					C[i].CanCollide = false
+					local W = Instance.new('Weld')
+					W.Part0 = mainAsset.Middle
+					W.Part1 = C[i]
+					local CJ = CFrame.new(mainAsset.Middle.Position)
+					local C0 = mainAsset.Middle.CFrame:inverse()*CJ
+					local C1 = C[i].CFrame:inverse()*CJ
+					W.C0 = C0
+					W.C1 = C1
+					W.Parent = mainAsset.Middle
+				end
+				
+				local Y = Instance.new('Weld')
+				if player.Character:FindFirstChild(mainAsset.Name) ~= nil then
+					Y.Part0 = player.Character[mainAsset.Name]
+				end
+				Y.Part1 = mainAsset.Middle
+				Y.C0 = CFrame.new(0, 0, 0)
+				Y.Parent = Y.Part0	
+			end
+			
+			local h = mainAsset:GetChildren()
+			for i = 1, # h do
+				if h[i]:IsA('Part') or h[i]:IsA('UnionOperation') or h[i]:IsA('MeshPart') then
+					h[i].Anchored = false
+					h[i].CanCollide = false
+				end
+				if h[i].Name == 'Middle' then
+					h[i].Transparency = 1
+				end
+			end
+		end
+	end
+end
+
+--[[
+	--------------------------------------------------------------------------------------------------
+	-- @Name : 		  addPlayerAsset
+	-- @Description : When this is called, it will add an asset to the player
+					  such as the watch and bomb collar.
+	
+	-- @Params : 	  Player 'player' - The player to have a new uniform.
+					  Instance<Model> 'asset' - The place to the asset.
+	--------------------------------------------------------------------------------------------------
+--]]
+function uniformAPI.addPlayerAsset(player, asset)
+	if player and player.Character and player.Character:FindFirstChild('Humanoid') and player.Character.Humanoid.Health > 0 then
+		local character = player.Character
+		
+		local assetPackage = asset:Clone()
+		
+		-- add the uniform package model if needed
+		if character:FindFirstChild('AssetStorage') == nil then
+			local model = Instance.new('Model', character)
+			model.Name = 'AssetStorage'
+		end
+		
+		if character.AssetStorage:FindFirstChild(asset.Name) then return end
+		
+		local model = Instance.new('Model', character:FindFirstChild('AssetStorage'))
+		model.Name = asset.Name
+		
+		-- handle adding the physical asset to the player
+		for _, mainAsset in pairs(assetPackage:GetChildren()) do
+			mainAsset.Parent = model
+			local C = mainAsset:GetChildren()
+			for i = 1, #C do
+				if C[i]:IsA('Part') or C[i]:IsA('UnionOperation') or C[i]:IsA('MeshPart') then
+					C[i].CanCollide = false
+					local W = Instance.new('Weld')
+					W.Part0 = mainAsset.Middle
+					W.Part1 = C[i]
+					local CJ = CFrame.new(mainAsset.Middle.Position)
+					local C0 = mainAsset.Middle.CFrame:inverse()*CJ
+					local C1 = C[i].CFrame:inverse()*CJ
+					W.C0 = C0
+					W.C1 = C1
+					W.Parent = mainAsset.Middle
+				end
+				
+				local Y = Instance.new('Weld')
+				if player.Character:FindFirstChild(mainAsset.Name) ~= nil then
+					Y.Part0 = player.Character[mainAsset.Name]
+				end
+				Y.Part1 = mainAsset.Middle
+				Y.C0 = CFrame.new(0, 0, 0)
+				Y.Parent = Y.Part0	
+			end
+			
+			local h = mainAsset:GetChildren()
+			for i = 1, # h do
+				if h[i]:IsA('Part') or h[i]:IsA('UnionOperation') or h[i]:IsA('MeshPart') then
+					h[i].Anchored = false
+					h[i].CanCollide = false
+				end
+				if h[i].Name == 'Middle' then
+					h[i].Transparency = 1
+				end
+			end
+		end
+	end
+end
+
+return uniformAPI
